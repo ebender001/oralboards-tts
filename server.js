@@ -256,17 +256,27 @@ app.post("/tts", async (req, res) => {
       }
 
       // 2. Persistent Back4App cache
-      const persistentCache = await findPersistentStemCache(cacheKey);
+      let persistentCache = null;
+      try {
+        persistentCache = await findPersistentStemCache(cacheKey);
+      } catch (error) {
+        console.warn(`Persistent cache lookup failed for ${cacheKey}:`, error.message || error);
+      }
+
       if (persistentCache?.audioFile?.url) {
-        console.log(`Stem persistent cache hit: ${cacheKey}`);
-        const audioBuffer = await downloadPersistentAudio(persistentCache.audioFile.url);
+        try {
+          console.log(`Stem persistent cache hit: ${cacheKey}`);
+          const audioBuffer = await downloadPersistentAudio(persistentCache.audioFile.url);
 
-        // Repopulate local cache
-        fs.writeFileSync(cachePath, audioBuffer);
+          // Repopulate local cache
+          fs.writeFileSync(cachePath, audioBuffer);
 
-        res.setHeader("Content-Type", "audio/mpeg");
-        res.setHeader("X-TTS-Cache", "persistent-hit");
-        return res.send(audioBuffer);
+          res.setHeader("Content-Type", "audio/mpeg");
+          res.setHeader("X-TTS-Cache", "persistent-hit");
+          return res.send(audioBuffer);
+        } catch (error) {
+          console.warn(`Persistent audio download failed for ${cacheKey}:`, error.message || error);
+        }
       }
 
       // 3. Full miss: generate via ElevenLabs
@@ -282,19 +292,23 @@ app.post("/tts", async (req, res) => {
       fs.writeFileSync(cachePath, audioBuffer);
 
       // Save persistent cache
-      const filename = `${cacheKey}.mp3`;
-      const uploadedFile = await uploadParseFile(filename, audioBuffer);
+      try {
+        const filename = `${cacheKey}.mp3`;
+        const uploadedFile = await uploadParseFile(filename, audioBuffer);
 
-      await createPersistentStemCache({
-        cacheKey,
-        caseId,
-        text,
-        voiceId,
-        modelId,
-        voiceSettings,
-        audioFile: uploadedFile,
-        byteLength: audioBuffer.length
-      });
+        await createPersistentStemCache({
+          cacheKey,
+          caseId,
+          text,
+          voiceId,
+          modelId,
+          voiceSettings,
+          audioFile: uploadedFile,
+          byteLength: audioBuffer.length
+        });
+      } catch (error) {
+        console.warn(`Persistent cache save failed for ${cacheKey}:`, error.message || error);
+      }
 
       res.setHeader("Content-Type", "audio/mpeg");
       res.setHeader("X-TTS-Cache", "miss");
