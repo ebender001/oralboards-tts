@@ -16,6 +16,11 @@ const PARSE_REST_API_KEY = process.env.PARSE_REST_API_KEY;
 const PARSE_MASTER_KEY = process.env.PARSE_MASTER_KEY;
 const PARSE_SERVER_URL = process.env.PARSE_SERVER_URL || "https://parseapi.back4app.com";
 
+console.log("PARSE_APP_ID exists:", !!PARSE_APP_ID);
+console.log("PARSE_REST_API_KEY exists:", !!PARSE_REST_API_KEY);
+console.log("PARSE_MASTER_KEY exists:", !!PARSE_MASTER_KEY);
+console.log("PARSE_SERVER_URL:", PARSE_SERVER_URL);
+
 const STEM_CACHE_DIR = path.join(process.cwd(), "cache", "stems");
 fs.mkdirSync(STEM_CACHE_DIR, { recursive: true });
 
@@ -179,6 +184,30 @@ async function downloadPersistentAudio(audioUrl) {
 
 app.get("/healthz", (_req, res) => {
   res.json({ ok: true });
+});
+
+app.get("/parse-healthz", async (_req, res) => {
+  try {
+    const url = `${PARSE_SERVER_URL}/classes/TTSCache?limit=1`;
+
+    const resp = await fetch(url, {
+      method: "GET",
+      headers: getParseHeaders({ useMasterKey: true })
+    });
+
+    const responseText = await resp.text();
+
+    res.status(resp.ok ? 200 : resp.status).json({
+      ok: resp.ok,
+      status: resp.status,
+      responseText
+    });
+  } catch (error) {
+    res.status(500).json({
+      ok: false,
+      error: error.message || "Parse connectivity failed"
+    });
+  }
 });
 
 app.post("/tts", async (req, res) => {
