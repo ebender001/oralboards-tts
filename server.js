@@ -430,9 +430,30 @@ app.get("/healthz", (_req, res) => {
   res.json({ ok: true });
 });
 
-app.get("/parse-healthz", async (_req, res) => {
+app.get("/parse-healthz", async (req, res) => {
   try {
-    const url = `${PARSE_SERVER_URL}/classes/TTSCache?limit=1`;
+    const cacheKey = String(req.query.cacheKey || "").trim();
+    const caseId = String(req.query.caseId || "").trim();
+
+    let query = "limit=1&order=-createdAt";
+
+    if (cacheKey) {
+      query = `where=${encodeURIComponent(
+        JSON.stringify({ cacheKey })
+      )}&limit=5`;
+    } else if (caseId) {
+      query = `where=${encodeURIComponent(
+        JSON.stringify({ caseId, kind: "stem" })
+      )}&limit=5`;
+    }
+
+    const url = `${PARSE_SERVER_URL}/classes/TTSCache?${query}`;
+
+    console.log("[parse-healthz query]", {
+      cacheKey: cacheKey || null,
+      caseId: caseId || null,
+      url
+    });
 
     const resp = await fetch(url, {
       method: "GET",
@@ -444,6 +465,10 @@ app.get("/parse-healthz", async (_req, res) => {
     res.status(resp.ok ? 200 : resp.status).json({
       ok: resp.ok,
       status: resp.status,
+      query: {
+        cacheKey: cacheKey || null,
+        caseId: caseId || null
+      },
       responseText
     });
   } catch (error) {
