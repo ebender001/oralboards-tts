@@ -39,7 +39,6 @@ const MEDICAL_ABBREVIATIONS = {
   'PaO2': 'partial pressure of oxygen',
   'PaCO2': 'partial pressure of carbon dioxide',
   'HCO3': 'bicarbonate',
-  'BE': 'base excess',
   'FiO2': 'fraction of inspired oxygen',
 
   // Labs
