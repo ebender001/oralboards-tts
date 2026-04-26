@@ -309,6 +309,12 @@ async function generateElevenLabsAudio({ text, voiceId, modelId, voiceSettings }
 }
 
 async function findPersistentStemCache(cacheKey) {
+  console.log("[TTS persistent cache lookup]", {
+    cacheKey,
+    kind: "stem",
+    isActive: true
+  });
+
   const url = `${PARSE_SERVER_URL}/classes/TTSCache?where=${encodeURIComponent(
     JSON.stringify({
       cacheKey,
@@ -324,11 +330,26 @@ async function findPersistentStemCache(cacheKey) {
 
   if (!resp.ok) {
     const text = await resp.text();
+    console.log("[TTS persistent cache result] lookup-error", {
+      cacheKey,
+      status: resp.status,
+      responseText: text
+    });
     throw new Error(`Parse query failed ${resp.status}: ${text}`);
   }
 
   const json = await resp.json();
-  return json.results && json.results.length > 0 ? json.results[0] : null;
+  const result = json.results && json.results.length > 0 ? json.results[0] : null;
+
+  console.log("[TTS persistent cache result]", {
+    cacheKey,
+    hit: !!result,
+    objectId: result?.objectId || null,
+    hasAudioFile: !!result?.audioFile?.url,
+    resultCount: json.results?.length || 0
+  });
+
+  return result;
 }
 
 async function uploadParseFile(filename, audioBuffer) {
@@ -455,7 +476,14 @@ app.post("/tts", async (req, res) => {
       return res.status(500).json({ error: "Missing voiceId / ELEVENLABS_VOICE_ID" });
     }
 
-    console.log(`TTS request: raw="${rawText}" normalized="${text}"`);
+    console.log("[TTS request]", {
+      kind,
+      caseId,
+      voiceId,
+      modelId,
+      rawPrefix: rawText.slice(0, 120),
+      normalizedPrefix: text.slice(0, 120)
+    });
 
     // Cache only stem audio
     if (kind === "stem") {
@@ -473,9 +501,20 @@ app.post("/tts", async (req, res) => {
 
       const cachePath = getStemCachePath(cacheKey);
 
+      console.log("[TTS stem cache key]", {
+        caseId,
+        kind,
+        cacheKey,
+        cachePath,
+        voiceId,
+        modelId,
+        voiceSettings,
+        normalizedTextLength: text.length
+      });
+
       // 1. Local disk cache
       if (fs.existsSync(cachePath)) {
-        console.log(`Stem local cache hit: ${cacheKey}`);
+        console.log("[TTS local cache hit]", { cacheKey, cachePath });
         res.setHeader("Content-Type", "audio/mpeg");
         res.setHeader("X-TTS-Cache", "local-hit");
         return fs.createReadStream(cachePath).pipe(res);
@@ -491,7 +530,11 @@ app.post("/tts", async (req, res) => {
 
       if (persistentCache?.audioFile?.url) {
         try {
-          console.log(`Stem persistent cache hit: ${cacheKey}`);
+          console.log("[TTS persistent cache hit]", {
+            cacheKey,
+            objectId: persistentCache.objectId,
+            audioUrl: persistentCache.audioFile.url
+          });
           const audioBuffer = await downloadPersistentAudio(persistentCache.audioFile.url);
 
           // Repopulate local cache
@@ -506,7 +549,13 @@ app.post("/tts", async (req, res) => {
       }
 
       // 3. Full miss: generate via ElevenLabs
-      console.log(`Stem full cache miss: ${cacheKey}`);
+      console.log("[TTS full cache miss]", {
+        cacheKey,
+        caseId,
+        kind,
+        rawPrefix: rawText.slice(0, 120),
+        normalizedPrefix: text.slice(0, 120)
+      });
       const audioBuffer = await generateElevenLabsAudio({
         text,
         voiceId,
@@ -522,7 +571,7 @@ app.post("/tts", async (req, res) => {
         const filename = `${cacheKey}.mp3`;
         const uploadedFile = await uploadParseFile(filename, audioBuffer);
 
-        await createPersistentStemCache({
+        const createdCache = await createPersistentStemCache({
           cacheKey,
           caseId,
           rawText,
@@ -531,6 +580,13 @@ app.post("/tts", async (req, res) => {
           modelId,
           voiceSettings,
           audioFile: uploadedFile,
+          byteLength: audioBuffer.length
+        });
+
+        console.log("[TTS persistent cache saved]", {
+          cacheKey,
+          objectId: createdCache.objectId,
+          fileName: uploadedFile.name,
           byteLength: audioBuffer.length
         });
       } catch (error) {
