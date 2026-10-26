@@ -16,6 +16,7 @@ const PARSE_REST_API_KEY = process.env.PARSE_REST_API_KEY;
 const PARSE_MASTER_KEY = process.env.PARSE_MASTER_KEY;
 const PARSE_SERVER_URL = process.env.PARSE_SERVER_URL || "https://parseapi.back4app.com";
 
+console.log("Node version:", process.version);
 console.log("PARSE_APP_ID exists:", !!PARSE_APP_ID);
 console.log("PARSE_REST_API_KEY exists:", !!PARSE_REST_API_KEY);
 console.log("PARSE_MASTER_KEY exists:", !!PARSE_MASTER_KEY);
